@@ -1,0 +1,162 @@
+---
+title: "SML Assignment 3"
+author: "Shubhang Periwal 19201104"
+date: "4/18/2020"
+output: pdf_document
+---
+
+```{r}
+library(mlbench)
+data("Satellite")
+# this will re-order alphabetically class labels and remove spacing
+Satellite$classes <- gsub(" ", "_", Satellite$classes)
+Satellite$classes <- factor( as.character(Satellite$classes) )
+# to have the same initial split
+set.seed(777222)
+D <- nrow(Satellite)
+keep <- sample(1:D, 5500)
+test <- setdiff(1:D, keep)
+dat <- Satellite[keep,]
+dat_test <- Satellite[test,]
+```
+
+
+Multinomial Logistic Regression
+```{r}
+library(nnet)
+library(randomForest)
+fitLog <- multinom(classes ~ .,data = dat,maxit=300, trace=FALSE) #multi with maximum number of iteration set to 300
+fitCt <- randomForest(classes ~ ., data = dat,maxit=300, trace=FALSE) # randomforest 
+
+
+```
+
+
+
+```{r}
+#  Random Forest
+predValCt <- predict(fitCt, type = "class", newdata = dat_test)
+tabValCt <- table(dat_test$classes, predValCt)
+tabValCt
+accCt <- sum(diag(tabValCt))/sum(tabValCt)
+#
+# Multinomial Regression
+predValLog <- predict(fitLog, type = "class", newdata = dat_test)
+tabValLog <- table(dat_test$classes, predValLog)
+tabValLog
+accLog <- sum(diag(tabValLog))/sum(tabValLog)
+
+```
+
+```{r}
+# print accuracy
+acc <- c(random_forest = accCt, multinomial = accLog)
+acc
+```
+
+```{r}
+# use the method that did best on the validation data 
+# to predict the test data
+best <- names( which.max(acc) )
+switch(best,
+       random_forest = {
+         predTestCt <- predict(fitCt, type = "class", newdata = dat_test)
+         tabTestCt <- table(dat_test$classes, predTestCt)
+         accBest <- sum(diag(tabTestCt))/sum(tabTestCt)
+       },
+       multinomial = {
+         predTestLog <- predict(fitLog, type = "class", newdata = dat_test)
+         tabTestLog <- table(dat_test$classes, predTestLog)
+         accBest <- sum(diag(tabTestLog))/sum(tabTestLog)
+       }
+)
+best
+accBest
+
+```
+
+
+
+```{r}
+# replicate the process a number of times
+R <- 100
+out <- matrix(NA, R, 4)
+colnames(out) <- c("val_random_forest", "val_logistic", "best", "test")
+out <- as.data.frame(out)
+
+for ( r in 1:R ) {
+  
+  # split the data
+  keep <- sample(1:D, 5500)
+  test <- setdiff(1:D, keep)
+  
+  dat_test <- as.data.frame(Satellite[test,])
+  
+
+  train <- sample(keep, size = 0.7*5500)                     # 70% of data points are used as training data 
+  val <- sample( setdiff(keep, train) )     # 30% of data points are used as validation data
+  dat <- as.data.frame(Satellite[train,])
+  dat_val <- as.data.frame(Satellite[val,])
+  
+  # fit classifiers to only the training data
+  fitCt <- randomForest(classes ~ ., data = dat,trace=FALSE)        # Random Forest
+  fitLog <- multinom(classes ~ ., data =  dat,trace=FALSE)    # multinomial logistic regression
+  
+  # classify the validation data observations
+  predValCt <- predict(fitCt, type = "class", newdata = dat_val)    # Random forest
+  tabValCt <- table(dat_val$classes, predValCt)
+  tabValCt
+  accCt <- sum(diag(tabValCt))/sum(tabValCt)
+  #
+  predValLog <- predict(fitLog, type = "class", newdata = dat_val)  # logistic regression
+  tabValLog <- table(dat_val$classes, predValLog)
+  tabValLog
+  accLog <- sum(diag(tabValLog))/sum(tabValLog)
+  
+  # accuracy
+  acc <- c(random_Forest = accCt, multinomial = accLog)
+  out[r,1] <- accCt
+  out[r,2] <- accLog
+  
+
+  # use the method that did best on the validation data 
+  # to predict the test data
+  best <- names( which.max(acc) )
+  switch(best,
+         random_Forest = {
+           predTestCt <- predict(fitCt, type = "class", newdata = dat_test)
+           tabTestCt <- table(dat_test$classes, predTestCt)
+           accBest <- sum(diag(tabTestCt))/sum(tabTestCt)
+         },
+         multinomial = {
+           predTestLog <- predict(fitLog, type = "class", newdata = dat_test)
+           tabTestLog <- table(dat_test$classes, predTestLog)
+           accBest <- sum(diag(tabTestLog))/sum(tabTestLog)
+         }
+  )
+  out[r,3] <- best
+  out[r,4] <- accBest
+  
+}
+
+
+```
+
+
+```{r}
+# check out the error rate summary statistics
+table(out[,3])
+tapply(out[,4], out[,3], summary)
+boxplot(out$test ~ out$best)
+stripchart(out$test ~ out$best, add = TRUE, vertical = TRUE,
+           method = "jitter", pch = 19, col = adjustcolor("magenta3", 0.2))
+mean(out$val_random_forest)
+plot(out$val_random_forest)
+mean(out$val_logistic)
+plot(out$val_logistic)
+var(out$val_random_forest)
+var(out$val_logistic)
+```
+
+
+
